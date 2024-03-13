@@ -1,0 +1,84 @@
+version: "3.9"
+services:
+    app:
+        build:
+            args:
+                user: project
+                uid: 1000
+            context: ./
+            dockerfile: Dockerfile
+        image: base
+        container_name: base-app
+        restart: unless-stopped
+        working_dir: /var/www/
+        volumes:
+            - ./:/var/www
+        networks:
+            - base
+
+    mysql:
+        image: mysql:8.0
+        ports:
+            - "${DB_CONTAINER_PORT}:3306"
+        container_name: base-mysql
+        environment:
+            MYSQL_USERNAME: ${DB_USERNAME}
+            MYSQL_DATABASE: ${DB_DATABASE}
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            MYSQL_PASSWORD: ${DB_PASSWORD}
+            SERVICE_TAGS: dev
+            SERVICE_NAME: mysql
+        volumes:
+            - ./docker/mysql:/docker-entrypoint-initdb.d
+        healthcheck:
+            test: [ "CMD", "mysqladmin", "ping", "-p${DB_PASSWORD}" ]
+            retries: 3
+            timeout: 5s
+        networks:
+            - base
+
+    nginx:
+        image: nginx:alpine
+        container_name: base-nginx
+        restart: unless-stopped
+        ports:
+            - "${NGINX_PORT}:80"
+        volumes:
+            - ./:/var/www
+            - ./docker/nginx:/etc/nginx/conf.d
+        networks:
+            - base
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        container_name: base-phpmyadmin
+        restart: always
+        depends_on:
+            - mysql
+        ports:
+            - "${PHPMYADMIN_PORT}:80"
+        environment:
+            PMA_ARBITRARY: 10
+            PMA_HOST: mysql
+            MYSQL_USERNAME: ${DB_USERNAME}
+            MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+            UPLOAD_LIMIT: 1000M
+        networks:
+            - base
+
+    cache:
+        image: redis:6.2-alpine
+        restart: always
+        ports:
+            - '${REDIS_PORT}:6379'
+        command: redis-server --save 20 1 --loglevel warning --requirepass eYVX7EwVmmxKPCDmwMtyKVge8oLd2t81
+        volumes:
+            - cache:/data
+
+networks:
+    base:
+        driver: bridge
+
+volumes:
+    cache:
+        driver: local
